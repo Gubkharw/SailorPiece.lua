@@ -10,6 +10,7 @@ getgenv().AutoSkill = false
 getgenv().AutoDungeon = false
 getgenv().AutoDungeonNearby = false
 getgenv().SelectedDungeonType = "None"
+getgenv().AntiAfk = true 
 
 -- ระบบ Auto Vote
 getgenv().AutoReplayDungeon = false
@@ -34,6 +35,21 @@ local BossList = {"Alucard", "Aizen", "Madoka", "Jinwoo", "Gojo", "Sukuna", "Yuj
 local IslandPatrol = {"Sailor", "Shibuya", "HuecoMundo", "Valentine"}
 
 -- [[ ฟังก์ชันสนับสนุน ]]
+
+-- ระบบ Anti-AFK Logic
+local VirtualUser = game:GetService("VirtualUser")
+game:GetService("Players").LocalPlayer.Idled:Connect(function()
+    if getgenv().AntiAfk then
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton2(Vector2.new())
+        Rayfield:Notify({
+            Title = "Anti-AFK System",
+            Content = "ป้องกันการเตะออกจากเซิร์ฟเวอร์เรียบร้อยแล้ว!",
+            Duration = 5,
+            Image = 4483362458,
+        })
+    end
+end)
 
 local function GetNearbyMonsterList()
     local Monsters = {}
@@ -116,7 +132,7 @@ local function GetMultiTargetMonster()
     for _, v in pairs(game.Workspace:GetDescendants()) do
         local isSelected = false
         for _, selectedName in pairs(getgenv().SelectedMonsters) do if v.Name == selectedName then isSelected = true break end end
-        if isSelected and v:FindFirstChild("Humanoid") and v.Humanoid.Health > 0 then
+        if isSelected and v:FindFirstChild("Humanoid") and v.Humanoid.Health > 0 and v:FindFirstChild("HumanoidRootPart") then
             local magnitude = (char.HumanoidRootPart.Position - v.HumanoidRootPart.Position).Magnitude
             if magnitude <= shortestDist then closest = v shortestDist = magnitude end
         end
@@ -174,7 +190,7 @@ end
 
 local FarmTab = Window:CreateTab("Auto Farm", 4483362458)
 
--- 1. ปรับปรุงใหม่: Auto Farm Nearby (Infinite Loop)
+-- 1. Auto Farm Nearby (เสถียร + ล็อคตัวนิ่ง)
 FarmTab:CreateSection("Auto Farm Nearby (Multi-Target)")
 local MonsterDropdown = FarmTab:CreateDropdown({
     Name = "Select Monsters to Farm",
@@ -193,35 +209,35 @@ FarmTab:CreateToggle({
     Callback = function(Value)
         getgenv().AutoFarmNearby = Value
         task.spawn(function()
-            -- เริ่มลูปหลัก (วนหาเป้าหมายตัวใหม่ไปเรื่อยๆ)
             while getgenv().AutoFarmNearby do
                 task.wait(0.1)
                 local target = GetMultiTargetMonster()
-                
-                if target then
-                    -- ลูปย่อย (เกาะติดเป้าหมายปัจจุบันจนกว่าจะตาย)
-                    while getgenv().AutoFarmNearby and target and target:FindFirstChild("Humanoid") and target.Humanoid.Health > 0 do
-                        task.wait(0.05)
-                        EquipWeaponLogic()
+                if target and target:FindFirstChild("HumanoidRootPart") then
+                    local targetRoot = target.HumanoidRootPart
+                    local targetHumanoid = target:FindFirstChild("Humanoid")
+                    while getgenv().AutoFarmNearby and targetHumanoid and targetHumanoid.Health > 0 do
+                        task.wait(0.01)
                         local char = game.Players.LocalPlayer.Character
                         local root = char and char:FindFirstChild("HumanoidRootPart")
-                        local tRoot = target:FindFirstChild("HumanoidRootPart")
-                        
-                        if root and tRoot then
-                            root.CFrame = tRoot.CFrame * CFrame.new(0, getgenv().FarmDistance, 0) * CFrame.Angles(math.rad(-90), 0, 0)
+                        if root and targetRoot then
+                            EquipWeaponLogic()
+                            root.Velocity = Vector3.new(0, 0, 0)
+                            root.RotVelocity = Vector3.new(0, 0, 0)
+                            root.CFrame = targetRoot.CFrame * CFrame.new(0, getgenv().FarmDistance, 0) * CFrame.Angles(math.rad(-90), 0, 0)
                             BossAttack()
+                        else
+                            break 
                         end
                     end
                 else
-                    -- ถ้าหาเป้าหมายไม่เจอ (มอนสเตอร์ตายหมด) ให้รอเกิด
-                    task.wait(1)
+                    task.wait(0.5)
                 end
             end
         end)
     end,
 })
 
--- 2. Island Patrol
+-- 2. Island Patrol (ฟังก์ชันเก่า)
 FarmTab:CreateSection("Island Patrol")
 FarmTab:CreateToggle({
     Name = "Start Island Patrol (Farm all Bosses)",
@@ -260,7 +276,7 @@ FarmTab:CreateToggle({
     end,
 })
 
--- 3. Dungeon Mode
+-- 3. Dungeon Mode (ฟังก์ชันเก่า)
 FarmTab:CreateSection("Dungeon Mode")
 FarmTab:CreateDropdown({
     Name = "Select Dungeon Type",
@@ -368,7 +384,7 @@ FarmTab:CreateToggle({
     end,
 })
 
--- 4. Strongest Boss Mode
+-- 4. Strongest Boss Mode (ฟังก์ชันเก่า)
 FarmTab:CreateSection("Strongest Boss Mode")
 FarmTab:CreateDropdown({
     Name = "Select Boss",
@@ -419,6 +435,14 @@ FarmTab:CreateToggle({
 
 -- [[ TAB: SETTINGS ]]
 local SetTab = Window:CreateTab("Settings", 4483362458)
+
+SetTab:CreateSection("System Protection")
+SetTab:CreateToggle({
+    Name = "Anti-AFK (Idle Kick Protection)",
+    CurrentValue = true,
+    Callback = function(Value) getgenv().AntiAfk = Value end,
+})
+
 SetTab:CreateSection("Combat & Weapon")
 local WeaponDropdown = SetTab:CreateDropdown({
     Name = "Select Weapon",
@@ -456,4 +480,4 @@ SetTab:CreateSlider({
     Callback = function(v) getgenv().NearbyDistance = v end,
 })
 
-Rayfield:Notify({Title = "GK Hub V30.16", Content = "Nearby Farm Loop System Ready!"})
+Rayfield:Notify({Title = "GK Hub V30.16", Content = "Complete System & Anti-AFK Ready!"})
