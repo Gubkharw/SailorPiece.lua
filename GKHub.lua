@@ -24,8 +24,8 @@ getgenv().SelectedStrongestDifficulty = "Normal"
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-    Name = "GK Hub | Ultimate V30.15",
-    LoadingTitle = "Precision Boss Targeting Loading...",
+    Name = "GK Hub | Ultimate V30.16",
+    LoadingTitle = "Nearby Farm Loop System Loading...",
     ConfigurationSaving = { Enabled = true, FileName = "SailorPiece_V30" }
 })
 
@@ -155,16 +155,12 @@ local function GetDungeonNearbyEnemy()
     return closest
 end
 
--- [[ แก้ไขใหม่: ฟังก์ชันค้นหา Strongest Boss (ล็อคชื่อ + เลือด 100M+) ]]
 local function GetStrongestBossPrecision()
     local char = game.Players.LocalPlayer.Character
     if not char or not char:FindFirstChild("HumanoidRootPart") then return nil end
-    
     for _, v in pairs(game.Workspace:GetDescendants()) do
         if v:IsA("Model") and v:FindFirstChild("Humanoid") and v:FindFirstChild("HumanoidRootPart") then
-            -- 1. ต้องไม่ใช่เรา และยังมีเลือดอยู่
             if v ~= char and v.Humanoid.Health > 0 then
-                -- 2. คัดกรอง NPC: ชื่อต้องมีคำว่า Strongest และเลือดสูงสุดต้องมากกว่า 100,000,000
                 if v.Name:lower():find("strongest") and v.Humanoid.MaxHealth >= 100000000 then
                     return v
                 end
@@ -178,7 +174,7 @@ end
 
 local FarmTab = Window:CreateTab("Auto Farm", 4483362458)
 
--- 1. Farm Nearby
+-- 1. ปรับปรุงใหม่: Auto Farm Nearby (Infinite Loop)
 FarmTab:CreateSection("Auto Farm Nearby (Multi-Target)")
 local MonsterDropdown = FarmTab:CreateDropdown({
     Name = "Select Monsters to Farm",
@@ -197,19 +193,28 @@ FarmTab:CreateToggle({
     Callback = function(Value)
         getgenv().AutoFarmNearby = Value
         task.spawn(function()
+            -- เริ่มลูปหลัก (วนหาเป้าหมายตัวใหม่ไปเรื่อยๆ)
             while getgenv().AutoFarmNearby do
                 task.wait(0.1)
-                local monster = GetMultiTargetMonster()
-                if monster then
-                    while getgenv().AutoFarmNearby and monster:FindFirstChild("Humanoid") and monster.Humanoid.Health > 0 do
+                local target = GetMultiTargetMonster()
+                
+                if target then
+                    -- ลูปย่อย (เกาะติดเป้าหมายปัจจุบันจนกว่าจะตาย)
+                    while getgenv().AutoFarmNearby and target and target:FindFirstChild("Humanoid") and target.Humanoid.Health > 0 do
                         task.wait(0.05)
                         EquipWeaponLogic()
                         local char = game.Players.LocalPlayer.Character
-                        if char and char:FindFirstChild("HumanoidRootPart") and monster:FindFirstChild("HumanoidRootPart") then
-                            char.HumanoidRootPart.CFrame = monster.HumanoidRootPart.CFrame * CFrame.new(0, getgenv().FarmDistance, 0) * CFrame.Angles(math.rad(-90), 0, 0)
+                        local root = char and char:FindFirstChild("HumanoidRootPart")
+                        local tRoot = target:FindFirstChild("HumanoidRootPart")
+                        
+                        if root and tRoot then
+                            root.CFrame = tRoot.CFrame * CFrame.new(0, getgenv().FarmDistance, 0) * CFrame.Angles(math.rad(-90), 0, 0)
                             BossAttack()
                         end
                     end
+                else
+                    -- ถ้าหาเป้าหมายไม่เจอ (มอนสเตอร์ตายหมด) ให้รอเกิด
+                    task.wait(1)
                 end
             end
         end)
@@ -263,14 +268,12 @@ FarmTab:CreateDropdown({
     CurrentOption = {"None"},
     Callback = function(Option) getgenv().SelectedDungeonType = Option[1] end,
 })
-
 FarmTab:CreateDropdown({
     Name = "Select Difficulty (Target)",
     Options = {"Easy", "Medium", "Hard", "Extreme"},
     CurrentOption = {"Easy"},
     Callback = function(Option) getgenv().SelectedDifficulty = Option[1] end,
 })
-
 FarmTab:CreateToggle({
     Name = "Auto Vote Difficulty",
     CurrentValue = false,
@@ -286,7 +289,6 @@ FarmTab:CreateToggle({
         end)
     end,
 })
-
 FarmTab:CreateToggle({
     Name = "Auto Vote Replay Dungeon",
     CurrentValue = false,
@@ -302,7 +304,6 @@ FarmTab:CreateToggle({
         end)
     end,
 })
-
 FarmTab:CreateToggle({
     Name = "Auto Dungeon (Full Clear)",
     CurrentValue = false,
@@ -342,7 +343,6 @@ FarmTab:CreateToggle({
         end)
     end,
 })
-
 FarmTab:CreateToggle({
     Name = "Auto Dungeon Nearby (Smart Scan)",
     CurrentValue = false,
@@ -368,23 +368,20 @@ FarmTab:CreateToggle({
     end,
 })
 
--- [[ 4. ปรับปรุง Strongest Boss Mode: ล็อคชื่อ + เลือด 100M+ ]]
+-- 4. Strongest Boss Mode
 FarmTab:CreateSection("Strongest Boss Mode")
-
 FarmTab:CreateDropdown({
     Name = "Select Boss",
     Options = {"StrongestToday", "StrongestHistory"},
     CurrentOption = {"StrongestToday"},
     Callback = function(Option) getgenv().SelectedStrongestBoss = Option[1] end,
 })
-
 FarmTab:CreateDropdown({
     Name = "Select Difficulty",
     Options = {"Normal", "Medium", "Hard", "Extreme"},
     CurrentOption = {"Normal"},
     Callback = function(Option) getgenv().SelectedStrongestDifficulty = Option[1] end,
 })
-
 FarmTab:CreateToggle({
     Name = "Auto Farm Strongest Boss",
     CurrentValue = false,
@@ -393,31 +390,22 @@ FarmTab:CreateToggle({
         task.spawn(function()
             while getgenv().AutoStrongestBoss do
                 task.wait(1)
-                
-                -- 1. วาร์ปไป Shinjuku
                 game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("TeleportToPortal"):FireServer("Shinjuku")
                 task.wait(2)
-                
-                -- 2. ส่งคำสั่งเสกบอส
                 local spawnArgs = {[1] = getgenv().SelectedStrongestBoss, [2] = getgenv().SelectedStrongestDifficulty}
                 game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("RequestSpawnStrongestBoss"):FireServer(unpack(spawnArgs))
-                
-                -- 3. ลูปค้นหาบอสที่ตรงเงื่อนไขและวาร์ปตี
                 while getgenv().AutoStrongestBoss do
                     task.wait(0.05)
-                    local target = GetStrongestBossPrecision() -- ใช้ฟังก์ชันล็อค 100M+ HP
-                    
+                    local target = GetStrongestBossPrecision()
                     if target then
                         local char = game.Players.LocalPlayer.Character
                         local root = char and char:FindFirstChild("HumanoidRootPart")
                         local tRoot = target:FindFirstChild("HumanoidRootPart")
-                        
                         if root and tRoot then
                             root.CFrame = tRoot.CFrame * CFrame.new(0, getgenv().FarmDistance, 0) * CFrame.Angles(math.rad(-90), 0, 0)
                             BossAttack()
                         end
                     else
-                        -- หากบอสตาย (แสกนหาตัว 100M ไม่เจอ) ให้เสกซ้ำทุก 3 วินาที
                         task.wait(3)
                         if getgenv().AutoStrongestBoss then
                            game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("RequestSpawnStrongestBoss"):FireServer(unpack(spawnArgs))
@@ -432,31 +420,26 @@ FarmTab:CreateToggle({
 -- [[ TAB: SETTINGS ]]
 local SetTab = Window:CreateTab("Settings", 4483362458)
 SetTab:CreateSection("Combat & Weapon")
-
 local WeaponDropdown = SetTab:CreateDropdown({
     Name = "Select Weapon",
     Options = GetMyInventory(),
     CurrentOption = {"None"},
     Callback = function(Option) getgenv().SelectedWeapon = Option[1] end,
 })
-
 SetTab:CreateButton({
     Name = "Refresh Weapon List",
     Callback = function() WeaponDropdown:Refresh(GetMyInventory()) end,
 })
-
 SetTab:CreateToggle({
     Name = "Auto Equip Selected Weapon",
     CurrentValue = false,
     Callback = function(Value) getgenv().AutoEquip = Value end,
 })
-
 SetTab:CreateToggle({
     Name = "Auto Use Skill (Z,X,C,V,F)",
     CurrentValue = false,
     Callback = function(Value) getgenv().AutoSkill = Value end,
 })
-
 SetTab:CreateSection("Farm Configuration")
 SetTab:CreateSlider({
     Name = "Attack Distance",
@@ -473,4 +456,4 @@ SetTab:CreateSlider({
     Callback = function(v) getgenv().NearbyDistance = v end,
 })
 
-Rayfield:Notify({Title = "GK Hub V30.15", Content = "Fix: Anti-NPC Boss Lock Ready!"})
+Rayfield:Notify({Title = "GK Hub V30.16", Content = "Nearby Farm Loop System Ready!"})
